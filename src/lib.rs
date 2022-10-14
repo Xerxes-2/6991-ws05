@@ -9,6 +9,14 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+trait Location {
+    fn get_location(&self) -> Coordinate;
+}
+
+trait ToCircle {
+    fn as_circle(&self) -> Circle;
+}
+
 #[derive(Deserialize, Serialize)]
 struct Circle {
     cx: i32,
@@ -27,15 +35,11 @@ pub struct Planet {
 }
 
 impl Planet {
-    fn get_location(&self) -> Coordinate {
-        self.coordinate.clone()
-    }
-
     fn get_weight(&self) -> i32 {
         self.weight
     }
 
-    fn as_circle(&self) -> Circle {
+    fn get_circle(&self) -> Circle {
         Circle {
             cx: self.coordinate.x,
             cy: self.coordinate.y,
@@ -54,19 +58,39 @@ pub struct Asteroid {
 }
 
 impl Asteroid {
-    fn get_location(&self) -> Coordinate {
-        self.coordinate.clone()
-    }
-
     fn get_velocity(&self) -> Direction {
         self.velocity.clone()
     }
+}
 
+impl Location for Asteroid {
+    fn get_location(&self) -> Coordinate {
+        self.coordinate.clone()
+    }
+}
+impl Location for Planet {
+    fn get_location(&self) -> Coordinate {
+        self.coordinate.clone()
+    }
+}
+impl ToCircle for Asteroid {
     fn as_circle(&self) -> Circle {
         Circle {
             cx: self.coordinate.x,
             cy: self.coordinate.y,
             r: 2,
+            stroke: "green".to_string(),
+            fill: "black".to_string(),
+            stroke_width: 3,
+        }
+    }
+}
+impl ToCircle for Planet {
+    fn as_circle(&self) -> Circle {
+        Circle {
+            cx: self.coordinate.x,
+            cy: self.coordinate.y,
+            r: self.weight,
             stroke: "green".to_string(),
             fill: "black".to_string(),
             stroke_width: 3,
