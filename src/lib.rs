@@ -9,16 +9,20 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-trait Location {
+pub trait Location {
     fn get_location(&self) -> Coordinate;
 }
 
-trait ToCircle {
+pub trait ToCircle {
     fn as_circle(&self) -> Circle;
 }
 
+pub trait Mass {
+    fn get_weight(&self) -> i32;
+}
+
 #[derive(Deserialize, Serialize)]
-struct Circle {
+pub struct Circle {
     cx: i32,
     cy: i32,
     r: i32,
@@ -34,20 +38,9 @@ pub struct Planet {
     pub weight: i32,
 }
 
-impl Planet {
+impl Mass for Planet {
     fn get_weight(&self) -> i32 {
         self.weight
-    }
-
-    fn get_circle(&self) -> Circle {
-        Circle {
-            cx: self.coordinate.x,
-            cy: self.coordinate.y,
-            r: self.weight,
-            stroke: "green".to_string(),
-            fill: "black".to_string(),
-            stroke_width: 3,
-        }
     }
 }
 
@@ -98,42 +91,18 @@ impl ToCircle for Planet {
     }
 }
 
-// #[derive(Clone)]
-// pub enum ObjectType {
-//     Planet(Planet),
-//     Asteroid(Asteroid),
-// }
-
-// impl ObjectType {
-//     fn get_circle(&self) -> Circle {
-//         match self {
-//             ObjectType::Planet(p) => p.as_circle(),
-//             ObjectType::Asteroid(a) => a.as_circle(),
-//         }
-//     }
-// }
-
 fn get_distance(x1: i32, y1: i32, x2: i32, y2: i32) -> i32 {
     (((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)) as f64).sqrt() as i32
 }
 
-fn apply_physics(
-    planets: Vec<Planet>,
+fn apply_physics<T>(
+    planets: Vec<T>,
     mut asteroids: Vec<Asteroid>,
     gravitational_constant: i32,
-) -> (Vec<Planet>, Vec<Asteroid>) {
-    // Go through each pair of objects, and apply
-    // let gravity_sources = objects
-    //     .iter()
-    //     .filter_map(|o| {
-    //         return if let ObjectType::Planet(p) = o {
-    //             Some((p.coordinate.clone(), p.weight))
-    //         } else {
-    //             None
-    //         };
-    //     })
-    //     .collect::<Vec<_>>();
-
+) -> (Vec<T>, Vec<Asteroid>)
+where
+    T: Mass + Location,
+{
     for mut asteroid in &mut asteroids {
         for planet in &planets {
             let distance = get_distance(
@@ -159,46 +128,6 @@ fn apply_physics(
             asteroid.velocity.y -= force.y;
         }
     }
-
-    // objects.iter_mut().for_each(|o| {
-    //     if let ObjectType::Asteroid(asteroid) = o {
-    //         gravity_sources
-    //             .iter()
-    //             .for_each(|(planet_coord, planet_weight)| {
-    //                 let distance = get_distance(
-    //                     planet_coord.x,
-    //                     planet_coord.y,
-    //                     asteroid.coordinate.x,
-    //                     asteroid.coordinate.y,
-    //                 );
-    //                 let distance = distance * distance;
-
-    //                 let force = Direction {
-    //                     x: (asteroid.coordinate.x - planet_coord.x)
-    //                         * planet_weight
-    //                         * gravitational_constant
-    //                         / distance,
-    //                     y: (asteroid.coordinate.y - planet_coord.y)
-    //                         * planet_weight
-    //                         * gravitational_constant
-    //                         / distance,
-    //                 };
-    //                 asteroid.velocity.x -= force.x;
-    //                 asteroid.velocity.y -= force.y;
-
-    //                 let vel = asteroid.velocity.clone();
-    //             })
-    //     }
-    // });
-
-    // Apply the new velocity to each object.
-    // objects.iter_mut().for_each(|object| {
-    //     if let ObjectType::Asteroid(asteroid) = object {
-    //         asteroid.coordinate.x += asteroid.velocity.x;
-    //         asteroid.coordinate.y += asteroid.velocity.y;
-    //     }
-    // });
-
     for asteroid in &mut asteroids {
         asteroid.coordinate.x += asteroid.velocity.x;
         asteroid.coordinate.y += asteroid.velocity.y;
@@ -207,12 +136,15 @@ fn apply_physics(
     (planets, asteroids)
 }
 
-fn handle_connection(
+fn handle_connection<T>(
     mut stream: TcpStream,
-    mut planets: Vec<Planet>,
+    mut planets: Vec<T>,
     mut asteroids: Vec<Asteroid>,
     gravitational_constant: i32,
-) -> (Vec<Planet>, Vec<Asteroid>) {
+) -> (Vec<T>, Vec<Asteroid>)
+where
+    T: Mass + Location + ToCircle,
+{
     (planets, asteroids) = apply_physics(planets, asteroids, gravitational_constant);
 
     // let circles = planet.iter().map(|o| o.get_circle()).collect::<Vec<_>>();
@@ -236,12 +168,15 @@ fn handle_connection(
     (planets, asteroids)
 }
 
-pub fn start_server(
+pub fn start_server<T>(
     uri: &str,
-    mut planets: Vec<Planet>,
+    mut planets: Vec<T>,
     mut asteroids: Vec<Asteroid>,
     gravitational_constant: i32,
-) -> ! {
+) -> !
+where
+    T: Mass + Location + ToCircle,
+{
     let listener = TcpListener::bind(uri).unwrap();
 
     for stream in listener.incoming() {
