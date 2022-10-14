@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 pub trait Location {
     fn get_location(&self) -> Coordinate;
+    fn update_location(&mut self, new_location: Coordinate);
 }
 
 pub trait ToCircle {
@@ -19,6 +20,11 @@ pub trait ToCircle {
 
 pub trait Mass {
     fn get_weight(&self) -> i32;
+}
+
+pub trait Velocity {
+    fn get_velocity(&self) -> Direction;
+    fn update_velocity(&mut self, new_velocity: Direction);
 }
 
 #[derive(Deserialize, Serialize)]
@@ -50,20 +56,20 @@ pub struct Asteroid {
     pub velocity: Direction,
 }
 
-impl Asteroid {
-    fn get_velocity(&self) -> Direction {
-        self.velocity.clone()
-    }
-}
-
 impl Location for Asteroid {
     fn get_location(&self) -> Coordinate {
         self.coordinate.clone()
+    }
+    fn update_location(&mut self, new_location: Coordinate) {
+        self.coordinate = new_location;
     }
 }
 impl Location for Planet {
     fn get_location(&self) -> Coordinate {
         self.coordinate.clone()
+    }
+    fn update_location(&mut self, new_location: Coordinate) {
+        self.coordinate = new_location;
     }
 }
 impl ToCircle for Asteroid {
@@ -90,20 +96,29 @@ impl ToCircle for Planet {
         }
     }
 }
+impl Velocity for Asteroid {
+    fn get_velocity(&self) -> Direction {
+        self.velocity.clone()
+    }
+    fn update_velocity(&mut self, new_velocity: Direction) {
+        self.velocity = new_velocity;
+    }
+}
 
 fn get_distance(x1: i32, y1: i32, x2: i32, y2: i32) -> i32 {
     (((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)) as f64).sqrt() as i32
 }
 
-fn apply_physics<T>(
+fn apply_physics<T, U>(
     planets: Vec<T>,
-    mut asteroids: Vec<Asteroid>,
+    mut asteroids: Vec<U>,
     gravitational_constant: i32,
-) -> (Vec<T>, Vec<Asteroid>)
+) -> (Vec<T>, Vec<U>)
 where
     T: Mass + Location,
+    U: Location + Velocity,
 {
-    for mut asteroid in &mut asteroids {
+    for asteroid in &mut asteroids {
         for planet in &planets {
             let distance = get_distance(
                 planet.get_location().x,
@@ -124,26 +139,31 @@ where
                     / distance,
             };
 
-            asteroid.velocity.x -= force.x;
-            asteroid.velocity.y -= force.y;
+            asteroid.update_velocity(Direction {
+                x: asteroid.get_velocity().x - force.x,
+                y: asteroid.get_velocity().y - force.y,
+            });
         }
     }
     for asteroid in &mut asteroids {
-        asteroid.coordinate.x += asteroid.velocity.x;
-        asteroid.coordinate.y += asteroid.velocity.y;
+        asteroid.update_location(Coordinate {
+            x: asteroid.get_location().x + asteroid.get_velocity().x,
+            y: asteroid.get_location().y + asteroid.get_velocity().y,
+        });
     }
 
     (planets, asteroids)
 }
 
-fn handle_connection<T>(
+fn handle_connection<T, U>(
     mut stream: TcpStream,
     mut planets: Vec<T>,
-    mut asteroids: Vec<Asteroid>,
+    mut asteroids: Vec<U>,
     gravitational_constant: i32,
-) -> (Vec<T>, Vec<Asteroid>)
+) -> (Vec<T>, Vec<U>)
 where
     T: Mass + Location + ToCircle,
+    U: Location + Velocity + ToCircle,
 {
     (planets, asteroids) = apply_physics(planets, asteroids, gravitational_constant);
 
@@ -168,14 +188,15 @@ where
     (planets, asteroids)
 }
 
-pub fn start_server<T>(
+pub fn start_server<T, U>(
     uri: &str,
     mut planets: Vec<T>,
-    mut asteroids: Vec<Asteroid>,
+    mut asteroids: Vec<U>,
     gravitational_constant: i32,
 ) -> !
 where
     T: Mass + Location + ToCircle,
+    U: Location + Velocity + ToCircle,
 {
     let listener = TcpListener::bind(uri).unwrap();
 
