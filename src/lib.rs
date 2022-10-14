@@ -3,11 +3,8 @@ pub mod directions;
 use crate::directions::{coordinate::Coordinate, direction::Direction};
 
 use std::{
-    fs,
-    io::{prelude::*, BufReader},
+    io::prelude::*,
     net::{TcpListener, TcpStream},
-    thread,
-    time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
@@ -77,88 +74,132 @@ impl Asteroid {
     }
 }
 
-#[derive(Clone)]
-pub enum ObjectType {
-    Planet(Planet),
-    Asteroid(Asteroid),
-}
+// #[derive(Clone)]
+// pub enum ObjectType {
+//     Planet(Planet),
+//     Asteroid(Asteroid),
+// }
 
-impl ObjectType {
-    fn get_circle(&self) -> Circle {
-        match self {
-            ObjectType::Planet(p) => p.as_circle(),
-            ObjectType::Asteroid(a) => a.as_circle(),
-        }
-    }
-}
+// impl ObjectType {
+//     fn get_circle(&self) -> Circle {
+//         match self {
+//             ObjectType::Planet(p) => p.as_circle(),
+//             ObjectType::Asteroid(a) => a.as_circle(),
+//         }
+//     }
+// }
 
 fn get_distance(x1: i32, y1: i32, x2: i32, y2: i32) -> i32 {
     (((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)) as f64).sqrt() as i32
 }
 
-fn apply_physics(mut objects: Vec<ObjectType>, gravitational_constant: i32) -> Vec<ObjectType> {
+fn apply_physics(
+    planets: Vec<Planet>,
+    mut asteroids: Vec<Asteroid>,
+    gravitational_constant: i32,
+) -> (Vec<Planet>, Vec<Asteroid>) {
     // Go through each pair of objects, and apply
-    let gravity_sources = objects
-        .iter()
-        .filter_map(|o| {
-            return if let ObjectType::Planet(p) = o {
-                Some((p.coordinate.clone(), p.weight))
-            } else {
-                None
+    // let gravity_sources = objects
+    //     .iter()
+    //     .filter_map(|o| {
+    //         return if let ObjectType::Planet(p) = o {
+    //             Some((p.coordinate.clone(), p.weight))
+    //         } else {
+    //             None
+    //         };
+    //     })
+    //     .collect::<Vec<_>>();
+
+    for mut asteroid in &mut asteroids {
+        for planet in &planets {
+            let distance = get_distance(
+                planet.get_location().x,
+                planet.get_location().y,
+                asteroid.get_location().x,
+                asteroid.get_location().y,
+            );
+            let distance = distance * distance;
+
+            let force = Direction {
+                x: (asteroid.get_location().x - planet.get_location().x)
+                    * planet.get_weight()
+                    * gravitational_constant
+                    / distance,
+                y: (asteroid.get_location().y - planet.get_location().y)
+                    * planet.get_weight()
+                    * gravitational_constant
+                    / distance,
             };
-        })
-        .collect::<Vec<_>>();
 
-    objects.iter_mut().for_each(|o| {
-        if let ObjectType::Asteroid(asteroid) = o {
-            gravity_sources
-                .iter()
-                .for_each(|(planet_coord, planet_weight)| {
-                    let distance = get_distance(
-                        planet_coord.x,
-                        planet_coord.y,
-                        asteroid.coordinate.x,
-                        asteroid.coordinate.y,
-                    );
-                    let distance = distance * distance;
-
-                    let force = Direction {
-                        x: (asteroid.coordinate.x - planet_coord.x)
-                            * planet_weight
-                            * gravitational_constant
-                            / distance,
-                        y: (asteroid.coordinate.y - planet_coord.y)
-                            * planet_weight
-                            * gravitational_constant
-                            / distance,
-                    };
-                    asteroid.velocity.x -= force.x;
-                    asteroid.velocity.y -= force.y;
-
-                    let vel = asteroid.velocity.clone();
-                })
+            asteroid.velocity.x -= force.x;
+            asteroid.velocity.y -= force.y;
         }
-    });
+    }
+
+    // objects.iter_mut().for_each(|o| {
+    //     if let ObjectType::Asteroid(asteroid) = o {
+    //         gravity_sources
+    //             .iter()
+    //             .for_each(|(planet_coord, planet_weight)| {
+    //                 let distance = get_distance(
+    //                     planet_coord.x,
+    //                     planet_coord.y,
+    //                     asteroid.coordinate.x,
+    //                     asteroid.coordinate.y,
+    //                 );
+    //                 let distance = distance * distance;
+
+    //                 let force = Direction {
+    //                     x: (asteroid.coordinate.x - planet_coord.x)
+    //                         * planet_weight
+    //                         * gravitational_constant
+    //                         / distance,
+    //                     y: (asteroid.coordinate.y - planet_coord.y)
+    //                         * planet_weight
+    //                         * gravitational_constant
+    //                         / distance,
+    //                 };
+    //                 asteroid.velocity.x -= force.x;
+    //                 asteroid.velocity.y -= force.y;
+
+    //                 let vel = asteroid.velocity.clone();
+    //             })
+    //     }
+    // });
 
     // Apply the new velocity to each object.
-    objects.iter_mut().for_each(|object| {
-        if let ObjectType::Asteroid(asteroid) = object {
-            asteroid.coordinate.x += asteroid.velocity.x;
-            asteroid.coordinate.y += asteroid.velocity.y;
-        }
-    });
+    // objects.iter_mut().for_each(|object| {
+    //     if let ObjectType::Asteroid(asteroid) = object {
+    //         asteroid.coordinate.x += asteroid.velocity.x;
+    //         asteroid.coordinate.y += asteroid.velocity.y;
+    //     }
+    // });
 
-    objects
+    for asteroid in &mut asteroids {
+        asteroid.coordinate.x += asteroid.velocity.x;
+        asteroid.coordinate.y += asteroid.velocity.y;
+    }
+
+    (planets, asteroids)
 }
 
 fn handle_connection(
     mut stream: TcpStream,
-    mut objects: Vec<ObjectType>,
+    mut planets: Vec<Planet>,
+    mut asteroids: Vec<Asteroid>,
     gravitational_constant: i32,
-) -> Vec<ObjectType> {
-    objects = apply_physics(objects, gravitational_constant);
+) -> (Vec<Planet>, Vec<Asteroid>) {
+    (planets, asteroids) = apply_physics(planets, asteroids, gravitational_constant);
 
-    let circles = objects.iter().map(|o| o.get_circle()).collect::<Vec<_>>();
+    // let circles = planet.iter().map(|o| o.get_circle()).collect::<Vec<_>>();
+    let mut circles = planets
+        .iter()
+        .map(|planet| planet.as_circle())
+        .collect::<Vec<_>>();
+    asteroids
+        .iter()
+        .for_each(|asteroid| circles.push(asteroid.as_circle()));
+
     let contents = serde_json::to_string(&circles).unwrap();
     let status_line = "HTTP/1.1 200 OK";
     let response = format!(
@@ -168,16 +209,22 @@ fn handle_connection(
     stream.flush().unwrap();
     stream.shutdown(std::net::Shutdown::Both).unwrap();
 
-    objects
+    (planets, asteroids)
 }
 
-pub fn start_server(uri: &str, mut objects: Vec<ObjectType>, gravitational_constant: i32) -> ! {
+pub fn start_server(
+    uri: &str,
+    mut planets: Vec<Planet>,
+    mut asteroids: Vec<Asteroid>,
+    gravitational_constant: i32,
+) -> ! {
     let listener = TcpListener::bind(uri).unwrap();
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
 
-        objects = handle_connection(stream, objects, gravitational_constant);
+        (planets, asteroids) =
+            handle_connection(stream, planets, asteroids, gravitational_constant);
     }
 
     unreachable!()
